@@ -16,4 +16,5 @@ results/*.csv
 results/*.tex
 results/*.log
 results/*.aux
+results/*.md
 !results/.gitkeep

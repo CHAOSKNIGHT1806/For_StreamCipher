@@ -96,6 +96,23 @@ def plot_pvalue_histogram(pvalues: Sequence[float], outdir: str = "results",
     return save_fig(fig, outdir, name)
 
 
+def plot_distinguishing_curve(correlation: float, n_max: int, outdir: str = "results",
+                              name: str = "distinguishing") -> List[str]:
+    """Advantage-vs-data curve for a linear distinguisher with correlation c."""
+    from .distinguisher import distinguisher_curve
+
+    _style()
+    ns, z = distinguisher_curve(correlation, n_max)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(ns, z, marker="o", ms=2, lw=1)
+    ax.axhline(1.0, color="r", ls="--", lw=1, label="advantage ~1 ($z=1$)")
+    ax.set_xlabel("keystream bits $N$")
+    ax.set_ylabel("$z = c\\sqrt{N}$")
+    ax.set_title(f"Linear distinguisher (correlation $c={correlation:g}$)")
+    ax.legend()
+    return save_fig(fig, outdir, name)
+
+
 def plot_scaling(x: Sequence[float], y: Sequence[float], outdir: str = "results",
                  name: str = "scaling", xlabel: str = "rounds", ylabel: str = "time (s)",
                  logy: bool = True) -> List[str]:

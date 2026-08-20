@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stream-cipher-analyzer"
+version = "0.1.0"
+description = "Portable stream-cipher security analysis tool: NIST/TestU01, linear complexity, statistical and structural attacks, forward/backward security, provable/PQ scaffolding, and literature-backed comparison."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy",
+    "scipy",
+    "sympy",
+    "matplotlib",
+    "pycryptodome",
+]
+
+[project.scripts]
+stream-analyzer = "cli:main"
+
+[tool.setuptools]
+packages = ["analyzer", "ciphers"]
+py-modules = ["cli"]

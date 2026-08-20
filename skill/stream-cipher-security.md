@@ -172,3 +172,30 @@ SNOW 3G、HC-128、Rabbit、Salsa20/12、ChaCha20、RC4、A5/1。
 ```
 
 每章产出的表格用 LaTeX + CSV 双份、图用 PDF 矢量 + PNG。
+
+---
+
+## 10. MATLAB 源码的翻译与验证（用户算法常为 MATLAB）
+
+用户算法多以 MATLAB 编写（矩阵运算快）。agent 必须：
+
+1. **逐运算翻译**为等价 Python/numpy，**保持算法与运算过程不变**：
+   - 数组 → numpy 数组（MATLAB 默认 double，位运算需显式 `uint8`/`uint64` 语义）；
+   - 逐元素运算（`.+ .- .* ./ .^`）→ numpy 向量化（`+ - * / **`；注意 MATLAB `/` 是右除、`./` 才是逐元素）；
+   - 位运算（`bitand bitor bitxor bitget bitset`）→ Python `& | ^`（先转 int）；
+   - **1-based（MATLAB）→ 0-based（Python）索引**是最常见 bug 源；
+   - `mod(a,m)` 对负数结果两者不同，密码学里须用 `(a % m + m) % m`；
+   - 循环体先原样保留（保真优先），避免"优化"改变运算顺序。
+2. **翻译正确性验证（强制）**：向用户索要「同一 seed 下前若干胞元/bit 的密钥流」，与翻译版输出**逐 bit 比对**，完全一致才继续（用户明确要求以此判定翻译是否准确）。
+3. 通过后再包成 `CipherAdapter`（见 §3），先跑 `ca-screen` 与黑盒测试。
+
+---
+
+## 11. 接入新密码模板
+
+见 `docs/example_cipher.py`（一个可运行的 CA 流密码适配器示例）。复制后改
+`keystream` / `init` / `step` 即可，然后：
+
+```bash
+python cli.py analyze docs/example_cipher.py:Rule30Cipher
+```
