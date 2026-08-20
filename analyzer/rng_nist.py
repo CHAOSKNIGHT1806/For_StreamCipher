@@ -482,3 +482,52 @@ def run_single(seq: Sequence[int]) -> Dict[str, Dict[str, float]]:
     for name, fn in _TESTS:
         out[name] = fn(seq)
     return out
+
+
+def _primary_p(result: Dict[str, float]) -> float:
+    """Extract a single representative p-value from a test's result dict."""
+    if "p_value" in result:
+        return float(result["p_value"])
+    if "p_value1" in result:
+        return float(result["p_value1"])
+    if "p_value_forward" in result:
+        return min(float(result["p_value_forward"]), float(result["p_value_backward"]))
+    return float("nan")
+
+
+def _uniformity_p(pvals: List[float], nbins: int = 10) -> float:
+    valid = [p for p in pvals if 0.0 <= p <= 1.0]
+    if not valid:
+        return float("nan")
+    counts, _ = np.histogram(valid, bins=nbins, range=(0.0, 1.0))
+    expected = len(valid) / nbins
+    chi2 = sum((c - expected) ** 2 / expected for c in counts)
+    return float(_igamc((nbins - 1) / 2.0, chi2 / 2.0))
+
+
+def run_battery(sequences: Sequence[Sequence[int]], alpha: float = 0.01) -> Dict[str, Dict]:
+    """Run all implemented tests over many sequences; compute pass rates + uniformity.
+
+    Returns ``{test_name: {p_values, pass_rate, uniformity_p, mean_p, median_p,
+    n_valid}}``. ``pass_rate`` is the proportion of sequences with p >= alpha.
+    """
+    seqs = [list(s) for s in sequences]
+    results: Dict[str, Dict] = {}
+    for name, fn in _TESTS:
+        pvals: List[float] = []
+        for s in seqs:
+            try:
+                pvals.append(_primary_p(fn(s)))
+            except Exception:
+                pvals.append(float("nan"))
+        valid = [p for p in pvals if not math.isnan(p)]
+        passed = sum(1 for p in valid if p >= alpha)
+        results[name] = {
+            "p_values": pvals,
+            "pass_rate": passed / len(valid) if valid else 0.0,
+            "uniformity_p": _uniformity_p(valid),
+            "mean_p": float(np.mean(valid)) if valid else float("nan"),
+            "median_p": float(np.median(valid)) if valid else float("nan"),
+            "n_valid": len(valid),
+        }
+    return results
