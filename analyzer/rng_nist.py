@@ -240,16 +240,17 @@ def non_overlapping_template(
         return {"p_values": [], "n_templates": len(keys), "m": m, "N": 0}
     mu = N / (1 << m)
     sigma2 = mu * (1.0 - 2.0 ** (-m))
+    # Precompute each block's value once, then count per template:
+    # O(N*m + K) instead of O(K*N*m).
+    counter = {}
+    for i in range(0, N * m, m):
+        v = 0
+        for j in range(m):
+            v = (v << 1) | s[i + j]
+        counter[v] = counter.get(v, 0) + 1
     p_values: List[float] = []
     for value in keys:
-        # big-endian m-bit pattern (MSB = first bit of the block)
-        W = 0
-        for i in range(0, N * m, m):
-            v = 0
-            for j in range(m):
-                v = (v << 1) | s[i + j]
-            if v == value:
-                W += 1
+        W = counter.get(value, 0)
         chi2 = (W - mu) ** 2 / sigma2
         p_values.append(float(_igamc(0.5, chi2 / 2.0)))
     return {
@@ -494,19 +495,100 @@ def cusum(seq: Sequence[int]) -> Dict[str, float]:
 
 
 # --------------------------------------------------------------------------- #
-# 14 / 15. Random Excursions (DEFERRED — exact standard constants pending)
+# 14. Random Excursions
 # --------------------------------------------------------------------------- #
 def random_excursions(seq: Sequence[int]) -> Dict[str, float]:
-    raise NotImplementedError(
-        "random_excursions deferred: exact per-state pi constants must be "
-        "sourced from NIST SP 800-22 Rev1a Table 2-5 before use."
-    )
+    """Random excursions test (SP 800-22 Rev 1a §2.14).
+
+    Build S_k from X_i = 2*eps_i - 1 with S_0 = 0 and a trailing S_{n+1} = 0, then
+    cut the walk into J cycles (between successive returns to 0).  For each of the
+    eight states x in {-4..-1, +1..+4} count xi(x,k) = # cycles in which state x is
+    visited exactly k times (k = 0..4, with k=5 meaning ">= 5 visits").  Compare to
+    NIST's pi(|x|, k) table (``nist_data.EXCURSIONS_PIX``):
+
+        chi^2(x) = sum_k (xi(x,k) - J*pi(|x|,k))^2 / (J*pi(|x|,k)),
+        p(x)     = igamc(df/2, chi^2(x)/2),  df = 6 - 1 = 5.
+
+    ``df = 5`` (six categories minus one) matches NIST STS 2.1.2
+    ``randomExcursions.c``, which calls ``cephes_igamc(2.5, sum/2.0)`` (2.5 = 5/2).
+    Returns one p-value per state (8 values) plus a representative ``p_value`` =
+    min of the 8 (the standard's criterion: FAIL only if every state passes).
+    """
+    s = _bits(seq)
+    n = len(s)
+    # Partials with trailing 0 terminator: S_0=0 at index 0, then S_1..S_n, then 0.
+    S = [0]
+    run = 0
+    for b in s:
+        run += 2 * b - 1
+        S.append(run)
+    S.append(0)
+    # Cut cycles between zeros.
+    cycles: List[List[int]] = []
+    start = 1
+    for i in range(1, len(S)):
+        if S[i] == 0:
+            cycles.append(S[start:i])
+            start = i + 1
+    J = len(cycles)
+    p_values: List[float] = []
+    for x in (-4, -3, -2, -1, 1, 2, 3, 4):
+        counts = [0] * 6  # k = 0..4, then >=5
+        for cyc in cycles:
+            occ = sum(1 for v in cyc if v == x)
+            if occ <= 4:
+                counts[occ] += 1
+            else:
+                counts[5] += 1
+        row = EXCURSIONS_PIX[abs(x)]
+        chi2 = sum((counts[k] - J * row[k]) ** 2 / (J * row[k]) for k in range(6))
+        p_values.append(float(_igamc(2.5, chi2 / 2.0)))
+    return {
+        "p_values": p_values,
+        "p_value": float(min(p_values)),
+        "J": J,
+        "states": [-4, -3, -2, -1, 1, 2, 3, 4],
+    }
 
 
+# --------------------------------------------------------------------------- #
+# 15. Random Excursions Variant
+# --------------------------------------------------------------------------- #
 def random_excursions_variant(seq: Sequence[int]) -> Dict[str, float]:
-    raise NotImplementedError(
-        "random_excursions_variant deferred: see random_excursions."
-    )
+    """Random excursions variant test (SP 800-22 Rev 1a §2.15).
+
+    For each state x in {-9..-1, +1..+9} count xi(x) = total visits to x across the
+    whole padded walk S' (S_0=0, trailing S_{n+1}=0).  With J = number of cycles,
+    the p-value is (NIST STS 2.1.2 ``randomExcursionsVariant.c``, closed form):
+
+        p(x) = erfc( |xi(x) - J| / sqrt( 2 * J * (4*|x| - 2) ) ).
+
+    Returns one p-value per state (18 values; note states with zero visits still
+    yield a one-sided erfc, so every p stays in (0,1]).  ``p_value`` = min over the
+    18 states.
+    """
+    s = _bits(seq)
+    n = len(s)
+    S = [0]
+    run = 0
+    for b in s:
+        run += 2 * b - 1
+        S.append(run)
+    S.append(0)
+    J = sum(1 for v in S[1:] if v == 0)
+    p_values: List[float] = []
+    for x in range(-9, 10):
+        if x == 0:
+            continue
+        count = sum(1 for v in S if v == x)
+        denom = math.sqrt(2.0 * J * (4.0 * abs(x) - 2.0))
+        p_values.append(float(_erfc(abs(count - J) / denom)))
+    return {
+        "p_values": p_values,
+        "p_value": float(min(p_values)),
+        "J": J,
+        "states": [x for x in range(-9, 10) if x != 0],
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -519,12 +601,15 @@ _TESTS = [
     ("longest_run_ones", longest_run_ones),
     ("binary_matrix_rank", binary_matrix_rank),
     ("dft", dft),
+    ("non_overlapping_template", non_overlapping_template),
     ("overlapping_template", overlapping_template),
     ("maurer_universal", maurer_universal),
     ("linear_complexity", linear_complexity_test),
     ("serial", serial),
     ("approximate_entropy", approximate_entropy),
     ("cusum", cusum),
+    ("random_excursions", random_excursions),
+    ("random_excursions_variant", random_excursions_variant),
 ]
 
 
@@ -544,6 +629,8 @@ def _primary_p(result: Dict[str, float]) -> float:
         return float(result["p_value1"])
     if "p_value_forward" in result:
         return min(float(result["p_value_forward"]), float(result["p_value_backward"]))
+    if "p_values" in result and len(result["p_values"]) > 0:
+        return float(min(result["p_values"]))
     return float("nan")
 
 
@@ -583,3 +670,33 @@ def run_battery(sequences: Sequence[Sequence[int]], alpha: float = 0.01) -> Dict
             "n_valid": len(valid),
         }
     return results
+
+
+if __name__ == "__main__":
+    import random as _random
+
+    _random.seed(12345)
+    # 10^6 pseudo-random bits from Python's Mersenne Twister.
+    bits = [_random.getrandbits(1) for _ in range(1_000_000)]
+
+    targets = {
+        "non_overlapping_template": non_overlapping_template,
+        "overlapping_template": overlapping_template,
+        "random_excursions": random_excursions,
+        "random_excursions_variant": random_excursions_variant,
+    }
+    for name, fn in targets.items():
+        r = fn(bits)
+        pv = r.get("p_value")
+        plist = r.get("p_values", [])
+        in_range = (pv is not None and 0.0 < pv < 1.0) or all(
+            0.0 < p < 1.0 for p in plist
+        )
+        nlist = len(plist) if plist else "-"
+        print(f"{name:28s} p_value={pv!r:>12}  n_p_values={nlist}  in(0,1)={in_range}")
+
+    names = [name for name, _ in _TESTS]
+    print(f"\nrun_single covers {len(names)} tests:")
+    print(names)
+    assert len(names) == 15, "expected 15 NIST tests"
+    print("OK: 15 tests present")

@@ -82,6 +82,7 @@ class Salsa20(CipherAdapter):
     name = "Salsa20"
     key_size = 256   # bits
     iv_size = 64     # bits (8-byte nonce)
+    state_size = 512  # bits (16 words x 32 bits)
 
     def keystream(self, key: bytes, iv: bytes, nbits: int) -> List[int]:
         key = key[:32].ljust(32, b"\x00")
