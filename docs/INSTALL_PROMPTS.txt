@@ -1,0 +1,84 @@
+====================================================================
+序列密码安全性分析 Skill + 工具 —— 安装提示词（二选一，整段复制粘贴）
+====================================================================
+
+说明：把下面【提示词 A】或【提示词 B】整段复制，粘贴给新电脑的
+DeepSeekHarness agent 即可。提示词已内置避坑说明，agent 照着做即可零调试。
+
+====================================================================
+【提示词 A：离线安装】（前提：stream-cipher-analyzer-v0.1.0.zip 已复制到工作区根目录）
+====================================================================
+
+请安装一个「序列密码安全性分析」工具并注册对应的 DSH skill。
+前提：工作区根目录下已有一个压缩包 stream-cipher-analyzer-v0.1.0.zip。
+
+请严格按下面步骤执行，不要跳过、不要自行改方案：
+
+1. 解压到工作区根目录：
+   - 先用 pwd 或 $PWD 确认工作区根目录的绝对路径（记为 <WS>）
+   - 找到 <WS> 下的 stream-cipher-analyzer-v0.1.0.zip
+   - 解压到 <WS> 根目录（解压后得到 <WS>\stream-cipher-analyzer\，记这个绝对路径为 <TOOL_DIR>）
+
+2. 验证 Python 依赖（Tier 0，通常 harness 已预装）：
+   - 运行：python -c "import numpy, scipy, sympy, matplotlib, Crypto; print('deps OK')"
+   - 若报 ModuleNotFoundError，运行：pip install -r <TOOL_DIR>\requirements.txt
+   - ⚠️ 若 pip 报 "Permission denied ... .whl.metadata"，这是沙箱禁止向临时目录写文件的已知限制，
+     不要反复重试；改用第 5 步的 install_deps.py 方式，或只装 Tier 0 五个包。
+
+3. 注册 DSH skill（关键，务必做）：
+   - 用户技能根目录是 <用户主目录>\.dsh\skills\（用 $env:USERPROFILE 获取用户主目录）
+   - 创建目录 <用户主目录>\.dsh\skills\stream-cipher-security\
+   - 把 <TOOL_DIR>\skill\SKILL.md 复制为上述目录下的 SKILL.md
+   - 打开 SKILL.md，把里面所有 "D:\hardness\stream-cipher-analyzer" 替换成实际的 <TOOL_DIR>
+   - ⚠️ 写 .dsh 目录在工作区之外，沙箱默认会拒绝；用 sandbox_permissions（danger-full-access）重试，
+     并附一句 justification（例如"注册 DSH skill 需写入用户技能根目录"），用户批准即可。
+
+4. 验证安装（四个命令全部无报错才算成功）：
+   - cd <TOOL_DIR>
+   - python tests\run_all.py          （应显示 4/4 smoke suites passed）
+   - python tests\test_ciphers.py     （应显示 5/5 ciphers passed）
+   - python tests\test_nist15.py      （应显示 OK）
+   - python cli.py list               （应列出 chacha20/trivium/salsa20/a51/grain128）
+
+5. （可选）装增强包 z3/galois/pandas/statsmodels：
+   - python <TOOL_DIR>\scripts\install_deps.py
+     （它会自动按你的 Python 版本下载 wheel 并解压到 vendor/，绕过 pip 沙箱限制；
+      不装也不影响核心功能。）
+
+完成后回报：<TOOL_DIR> 的绝对路径、skill 是否注册成功、第 4 步四个命令的结果。
+
+====================================================================
+【提示词 B：在线安装】（前提：工作区当前为空）
+====================================================================
+
+请安装一个「序列密码安全性分析」工具并注册对应的 DSH skill。
+前提：工作区当前为空（无任何文件）。
+
+请严格按下面步骤执行：
+
+1. 克隆仓库到工作区根目录：
+   - 先用 pwd 确认工作区根目录的绝对路径（记为 <WS>）
+   - 运行：git clone https://github.com/CHAOSKNIGHT1806/For_StreamCipher.git stream-cipher-analyzer
+   - 记 <TOOL_DIR> = <WS>\stream-cipher-analyzer
+
+2. 安装 Python 依赖（Tier 0）：
+   - 运行：python -c "import numpy, scipy, sympy, matplotlib, Crypto; print('deps OK')"
+   - 若缺，运行：pip install -r <TOOL_DIR>\requirements.txt
+   - ⚠️ 若 pip 报 "Permission denied ... .whl.metadata"，不要反复重试，改用第 5 步方式。
+
+3. 注册 DSH skill：
+   - 创建 <用户主目录>\.dsh\skills\stream-cipher-security\ 目录（$env:USERPROFILE 取用户主目录）
+   - 把 <TOOL_DIR>\skill\SKILL.md 复制为 SKILL.md
+   - 把 SKILL.md 里的 "D:\hardness\stream-cipher-analyzer" 全部替换为实际 <TOOL_DIR>
+   - ⚠️ 写 .dsh 目录会被沙箱拒绝，用 sandbox_permissions（danger-full-access）重试并附 justification。
+
+4. 验证安装：
+   - cd <TOOL_DIR>
+   - python tests\run_all.py && python tests\test_ciphers.py && python tests\test_nist15.py && python cli.py list
+   - 全部无报错即成功。
+
+5. （可选）装增强包：python <TOOL_DIR>\scripts\install_deps.py
+
+完成后回报：<TOOL_DIR>、skill 是否注册成功、第 4 步验证结果。
+
+====================================================================
