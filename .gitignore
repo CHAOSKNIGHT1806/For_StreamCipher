@@ -13,6 +13,9 @@ vendor/
 # Stray reference PDFs downloaded into the repo root by research subagents
 /*.pdf
 
+# Local deploy key / credentials (never commit)
+.deploy/
+
 # Generated outputs
 results/*.png
 results/*.pdf
