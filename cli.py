@@ -22,6 +22,11 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# Optional local vendor/ install (sandbox workaround for pip): expose it if present.
+_VENDOR = os.path.join(ROOT, "vendor")
+if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
+
 from analyzer.ca_model import screen_linear_degeneration  # noqa: E402
 from analyzer.comparison import ca_attack_surface_table, comparison_table  # noqa: E402
 from analyzer.empirical import empirical_comparison  # noqa: E402
