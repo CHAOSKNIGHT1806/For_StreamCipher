@@ -1,0 +1,12 @@
+# Core (Tier 0) — required
+numpy
+scipy
+sympy
+matplotlib
+pycryptodome
+
+# Optional (Tier 1) — for heavier analysis / convenience
+# pandas
+# statsmodels
+# galois
+# z3-solver
