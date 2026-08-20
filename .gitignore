@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local sandbox install artifacts
+.tmp/
+.pipcache/
+vendor/
+
+# Generated outputs
+results/*.png
+results/*.pdf
+results/*.csv
+results/*.tex
+results/*.log
+results/*.aux
+!results/.gitkeep
