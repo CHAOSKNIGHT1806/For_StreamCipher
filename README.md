@@ -2,58 +2,63 @@
 
 一个**可移植、通用、带说明文档**的序列密码（流密码）安全性分析工具 + Skill 组合。
 
-面向三类对象（算法类型）通用，而非绑定某个具体算法：
-
-- 基于元胞自动机（CA）的自研流密码；
-- 传统 LFSR/NFSR/ARX 流密码（用于对比）；
-- 任意能产生密钥流的算法（纯黑盒）。
+面向任意能产生密钥流的算法通用（不绑定某个具体密码）：基于元胞自动机（CA）的自研流密码、
+传统 LFSR/NFSR/ARX 流密码（对比基线）、或纯黑盒算法。
 
 ## 能力总览
 
-| 层 | 内容 | 自动化程度 |
+| 需求 | 模块 | 自动化 |
 |---|---|---|
-| 黑盒随机性 | NIST SP 800-22、TESTU01（SmallCrush/Crush/BigCrush） | 全自动 |
-| 线性与统计 | Berlekamp-Massey 线性复杂度、频率/自相关/χ²/游程 | 全自动 |
-| 结构攻击 | 代数攻击（SAT/Gröbner/XL）、立方体、相关、区分攻击 | 半自动（缩减轮/小规模可解） |
-| 安全性质 | 前向/后向安全、可证明安全脚手架、后量子 Grover 估算 | 半自动 |
-| 性能对比 | 软件吞吐 + 定频 FPGA 估算 + 带文献引用的对比表 | 半自动 |
-| 报告 | 论文级图表 + LaTeX 表 + 英文报告模板（默认 IEEE TIFS） | 模板化自动 |
+| NIST SP 800-22 / TESTU01 | `rng_nist` / `rng_testu01` | 全自动（NIST 已实测；TestU01 需 WSL） |
+| Berlekamp-Massey 线性复杂度 | `linear` | 全自动 |
+| 统计分析 | `stats`（频率/自相关/χ²/游程） | 全自动 |
+| 区分 / 代数 / 立方体 / 相关攻击 | `distinguisher` / `algebraic` / `cube` / `correlation` | 半自动（缩减轮/小规模可解） |
+| 前向 / 后向安全 | `security`（状态双射性/单向性） | 半自动 |
+| 可证明安全 / 后量子 | `security`（Tier1/2 脚手架 + Grover） | 脚手架（证明=人+agent 协作） |
+| 性能（软件 + FPGA） | `performance`（定频 FPGA 估算 + C 基准脚手架） | 半自动 |
+| 带文献引用的对比分析 | `comparison`（10 个参考密码 + CA 攻击面清单） | 全自动 |
+| 论文级图表 + 报告 | `report` / `report_builder`（IEEE TIFS 结构） | 模板化自动 |
 
 ## 目录结构
 
 ```
 stream-cipher-analyzer/
-├── skill/stream-cipher-security.md   # 方法论（如何分析、判什么、写什么）
-├── analyzer/                         # Python 工具包
-│   ├── ingest.py                     # 密钥流读取 + 密码适配器契约
-│   ├── linear.py                     # Berlekamp-Massey / 线性复杂度
-│   ├── stats.py                      # 基础统计分析
-│   ├── rng_nist.py                   # NIST SP 800-22（纯 Python）
-│   ├── rng_testu01.py                # TESTU01 封装（需 WSL/C）
-│   ├── ca_model.py                   # CA → ANF / GF(2) 方程组建模
-│   ├── algebraic.py                  # SAT / Gröbner / XL
-│   ├── cube.py                       # 立方体攻击
-│   ├── correlation.py                # 相关 / 快速相关攻击
-│   ├── security.py                   # 前向/后向、可证明脚手架、Grover
-│   ├── performance.py                # 软件基准 + 定频 FPGA 估算
-│   └── report.py                     # 图 / 表 / 报告模板
-├── ciphers/                          # 内置参考密码适配器（Trivium/Grain/ZUC/ChaCha/...）
-├── tests/                            # 单元测试 + 冒烟测试
-├── docs/                             # 报告模板、期刊模板说明
-└── results/                          # 输出（LaTeX 表、PDF/PNG 图、报告）
+├── skill/stream-cipher-security.md   # 方法论（管线/契约/阈值/攻击套路/证明工作流/MATLAB 翻译）
+├── analyzer/                         # 工具包（见上表）
+├── ciphers/                          # 内置参考密码适配器
+├── docs/                             # environment.md、literature-scan.md、example_cipher.py
+├── tests/                            # 冒烟测试（smoke1..4）
+├── cli.py                            # 命令入口
+├── requirements.txt / pyproject.toml / LICENSE
+└── results/                          # 输出（图/表/报告，已 gitignore）
 ```
 
 ## 安装
 
-纯 Python 依赖（Python ≥ 3.10，推荐 3.12）：
-
+**Tier 0（必需，纯 Python）**：
 ```bash
-pip install numpy scipy sympy matplotlib pycryptodome pandas statsmodels galois z3-solver
+pip install numpy scipy sympy matplotlib pycryptodome
 ```
 
-TESTU01 / C 软件基准需要 **WSL（Ubuntu）+ gcc**，见 `docs/environment.md`（规划中）。
+**Tier 1（可选，需 WSL）**：`gcc` + TestU01（BigCrush）、C 软件基准、SAT/Gröbner —— 见
+[`docs/environment.md`](docs/environment.md)。
 
 ## 快速开始
+
+```bash
+python cli.py list                              # 列出内置密码
+python cli.py ca-screen --rules 90 30 150 110   # CA 线性退化筛查
+python cli.py compare                            # 生成参考密码对比表
+python cli.py analyze chacha20 --nseq 10 --nbits 1000000
+python cli.py analyze 你的算法.py:类名 --nseq 10 --nbits 1000000
+python cli.py report  你的算法.py:类名 --rule 30 --cells 64 --key-bits 128
+```
+
+最后一条命令跑完整管线并产出 `results/report.md` + 全部图/表。
+
+## 接入一个自己的密码（5 分钟）
+
+只需继承 `CipherAdapter` 并实现 `keystream(key, iv, nbits) -> list[int]`：
 
 ```python
 from analyzer.ingest import CipherAdapter
@@ -67,16 +72,23 @@ class MyCipher(CipherAdapter):
         return bits
 ```
 
-只需实现 `keystream(key, iv, nbits)` 即可解锁全部黑盒测试。要解锁结构攻击，
-再实现 `init` / `step` / `output_function`（见 skill 文档第 3 节）。
+实现 `keystream` 即可解锁全部黑盒测试；再实现 `init` / `step` / `output_function`
+解锁结构攻击与安全层。完整可运行示例见 [`docs/example_cipher.py`](docs/example_cipher.py)；
+契约与方法论详见 [`skill/stream-cipher-security.md`](skill/stream-cipher-security.md)。
 
 ## 可移植性
 
-本项目**零宿主机依赖**（除 Python 解释器与可选 WSL）：整个目录复制/解压到任意
-机器的 harness 工作目录即可用，无需重新构建。发布到 GitHub 后他人 `git clone` 即可。
+本项目**零宿主机依赖**（除 Python 解释器与可选 WSL）：整个目录复制/解压到任意机器的
+harness 工作目录即可用，无需重新构建。发布到 GitHub 后他人 `git clone` 即可；也可
+`pip install -e .` 得到 `stream-analyzer` 命令。
 
 ## 当前状态
 
-- [x] 脚手架 + 适配器契约 + ingest/linear/stats
-- [ ] NIST SP 800-22 / TESTU01 / 结构层 / 安全层 / 性能层 / 报告层（开发中）
-- [ ] 内置参考密码适配器（开发中）
+- [x] 脚手架 + 适配器契约 + 黑盒层（NIST 12/15 + battery + B-M + 统计）
+- [x] 结构层（CA/ANF + 代数 XL + 立方体 + 相关 + 区分）
+- [x] 安全层（前向/后向 + 可证明脚手架 + Grover）+ 性能层（FPGA 估算）
+- [x] 对比层（10 个参考密码带引用）+ 报告层（图/表/报告组装）
+- [ ] NIST 剩余 3 项（148 模板 + excursions，子代理核对中）
+- [ ] 更多参考密码适配器（Trivium/Grain/ZUC/A5/1/Salsa20，子代理实现中）
+- [ ] TESTU01 端到端 + C 软件基准（待 WSL）
+- [ ] GitHub 发布（待账号/PAT）
