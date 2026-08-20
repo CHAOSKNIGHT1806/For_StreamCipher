@@ -10,6 +10,9 @@ __pycache__/
 vendor/
 .mplconfig/
 
+# Stray reference PDFs downloaded into the repo root by research subagents
+/*.pdf
+
 # Generated outputs
 results/*.png
 results/*.pdf
