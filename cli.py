@@ -24,10 +24,12 @@ if ROOT not in sys.path:
 
 from analyzer.ca_model import screen_linear_degeneration  # noqa: E402
 from analyzer.comparison import ca_attack_surface_table, comparison_table  # noqa: E402
+from analyzer.empirical import empirical_comparison  # noqa: E402
 from analyzer.ingest import generate_samples  # noqa: E402
 from analyzer.linear import linear_complexity, linear_complexity_profile  # noqa: E402
 from analyzer.performance import ca_fpga_estimate  # noqa: E402
 from analyzer.report import (  # noqa: E402
+    csv_table,
     nist_report_table,
     plot_autocorrelation,
     plot_linear_complexity,
@@ -130,6 +132,16 @@ def cmd_compare(_args) -> None:
     print(f"comparison + CA attack-surface tables written to {_args.outdir}/")
 
 
+def cmd_empirical(args) -> None:
+    from ciphers import BUILTIN
+    rows = empirical_comparison([BUILTIN[n]() for n in BUILTIN], nbits=args.nbits)
+    headers = ["cipher", "linear_complexity", "monobit_z", "runs_z", "prop_ones"]
+    for r in rows:
+        print(f"{r['cipher']:12s} LC={r['linear_complexity']:5d}  "
+              f"monobit_z={r['monobit_z']:7.3f}  runs_z={r['runs_z']:7.3f}  ones={r['prop_ones']:.4f}")
+    csv_table(headers, [[r[h] for h in headers] for r in rows], args.outdir, "empirical_comparison")
+
+
 def _add_blackbox_args(p) -> None:
     p.add_argument("cipher")
     p.add_argument("--nseq", type=int, default=10)
@@ -167,6 +179,10 @@ def main() -> None:
     cp = sub.add_parser("compare", help="generate reference comparison tables")
     cp.add_argument("--outdir", default="results")
 
+    ep = sub.add_parser("empirical", help="measured black-box comparison of registered ciphers")
+    ep.add_argument("--nbits", type=int, default=20000)
+    ep.add_argument("--outdir", default="results")
+
     args = p.parse_args()
     if args.cmd == "list":
         cmd_list(args)
@@ -178,6 +194,8 @@ def main() -> None:
         cmd_ca_screen(args)
     elif args.cmd == "compare":
         cmd_compare(args)
+    elif args.cmd == "empirical":
+        cmd_empirical(args)
 
 
 if __name__ == "__main__":

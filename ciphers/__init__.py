@@ -1,13 +1,18 @@
 """Built-in reference cipher adapters (comparison baselines).
 
-Each adapter subclasses :class:`analyzer.ingest.CipherAdapter`. Register new
-built-ins by adding an entry to ``BUILTIN``.
+Each adapter subclasses :class:`analyzer.ingest.CipherAdapter`. Only ciphers that
+pass their test-vector self-check are registered here; ``a51`` / ``grain128`` /
+``zuc256`` are added once their implementations are verified.
 """
 
 from .chacha20 import ChaCha20
+from .salsa20 import Salsa20
+from .trivium import Trivium
 
 BUILTIN = {
     "chacha20": ChaCha20,
+    "trivium": Trivium,
+    "salsa20": Salsa20,
 }
 
-__all__ = ["BUILTIN", "ChaCha20"]
+__all__ = ["BUILTIN", "ChaCha20", "Trivium", "Salsa20"]
