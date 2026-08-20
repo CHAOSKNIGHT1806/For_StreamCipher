@@ -5,6 +5,7 @@ __pycache__/
 
 # Local sandbox install artifacts
 .tmp/
+.tmp-pip/
 .pipcache/
 vendor/
 .mplconfig/
