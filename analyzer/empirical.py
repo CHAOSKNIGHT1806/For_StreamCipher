@@ -15,7 +15,11 @@ __all__ = ["empirical_row", "empirical_comparison"]
 
 
 def empirical_row(adapter, nbits: int = 20000, lc_bits: int = 2048) -> dict:
-    key = bytes(adapter.key_size // 8 or 16)
+    # Use a NONZERO default key: several ciphers (A5/1, CA rule 30) have a
+    # degenerate all-zero state, which would trivially fail the black-box tests
+    # and misrepresent an otherwise healthy cipher. A fixed nonzero pattern
+    # (0xA5) avoids that artifact.
+    key = bytes([0xA5] * (adapter.key_size // 8 or 16))
     iv = bytes(adapter.iv_size // 8 or 0)
     seq = adapter.keystream(key, iv, nbits)
     mb = monobit(seq)

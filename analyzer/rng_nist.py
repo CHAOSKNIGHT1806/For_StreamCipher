@@ -11,12 +11,14 @@ Rev 1a and flagged ``# [verify]`` where a final cross-check against a reference
 implementation is recommended before publication-grade use.
 
 Implemented: frequency, block_frequency, runs, longest_run_ones,
-binary_matrix_rank, dft, non_overlapping_template (template list required),
-overlapping_template, maurer_universal, linear_complexity_test, serial,
-approximate_entropy, cusum.
+binary_matrix_rank, dft, non_overlapping_template, overlapping_template,
+maurer_universal, linear_complexity_test, serial, approximate_entropy,
+cusum, random_excursions, random_excursions_variant.
 
-Deferred (need exact standard constants, see module docstring): random_excursions,
-random_excursions_variant.
+The three tests that need standard constants (non_overlapping_template,
+random_excursions, random_excursions_variant) read them from ``analyzer.nist_data``
+(transcribed from the NIST STS 2.1.2 reference implementation; see that module's
+docstring for provenance).
 """
 
 from __future__ import annotations
@@ -28,6 +30,11 @@ import numpy as np
 from scipy.special import erfc as _erfc
 from scipy.special import gammaincc as _igamc
 from scipy.stats import norm as _norm
+
+from .nist_data import (
+    EXCURSIONS_PIX,
+    TEMPLATES_M9,
+)
 
 __all__ = [
     "frequency",
@@ -208,67 +215,112 @@ def dft(seq: Sequence[int]) -> Dict[str, float]:
 # --------------------------------------------------------------------------- #
 def non_overlapping_template(
     seq: Sequence[int],
-    templates: Optional[List[List[int]]] = None,
+    templates: Optional[List[int]] = None,
     B: int = 9,
 ) -> Dict[str, float]:
-    """Non-overlapping template matching test.
+    """Non-overlapping template matching test (SP 800-22 Rev 1a §2.7).
 
-    ``templates`` is a list of length-B bit patterns (list of 0/1). The canonical
-    NIST 148-template list for B=9 is NOT bundled yet (see ``docs/todo.md``); pass
-    it explicitly or leave the default (all odd B-bit patterns) which is a
-    well-defined but NON-standard substitute.
+    Uses the canonical NIST 148 aperiodic 9-bit templates (``nist_data.TEMPLATES_M9``,
+    from STS 2.1.2 ``templates/template9``).  The sequence is split into
+    ``N = n // B`` non-overlapping B-bit blocks; for each template ``W`` counts the
+    number of blocks that *exactly equal* the template (the aperiodic templates
+    already avoid the self-overlap W_obs problem, so a plain block compare is the
+    standard substitution for the NIST sliding search at m=B).
+
+    Per template (B = m):  mu = N / 2^m,  sigma^2 = N * 2^-m * (1 - 2^-m),
+    chi^2 = (W - mu)^2 / sigma^2,  p = igamc(1/2, chi^2/2)  (one degree of freedom
+    per template — note the *block* variance, NOT the overlapping-template sigma^2).
     """
     s = _bits(seq)
     n = len(s)
-    if templates is None:
-        # fallback: all odd B-bit patterns (documented deviation, not NIST's 148)
-        templates = [list(map(int, f"{v:0{B}b}")) for v in range(1, 1 << B, 2)]
-    m = len(templates[0])
+    keys = list(TEMPLATES_M9 if templates is None else templates)
+    m = B
     N = n // m
-    p_values = []
-    for tpl in templates:
+    if N == 0:
+        return {"p_values": [], "n_templates": len(keys), "m": m, "N": 0}
+    mu = N / (1 << m)
+    sigma2 = mu * (1.0 - 2.0 ** (-m))
+    p_values: List[float] = []
+    for value in keys:
+        # big-endian m-bit pattern (MSB = first bit of the block)
         W = 0
         for i in range(0, N * m, m):
-            if s[i:i + m] == tpl:
+            v = 0
+            for j in range(m):
+                v = (v << 1) | s[i + j]
+            if v == value:
                 W += 1
-        mu = (n - m + 1) / (1 << m)
-        sigma2 = n * ((1 << -m) - (2 * m - 1) * (1 << (-2 * m)))
         chi2 = (W - mu) ** 2 / sigma2
         p_values.append(float(_igamc(0.5, chi2 / 2.0)))
-    return {"p_values": p_values, "n_templates": len(templates), "m": m}
+    return {
+        "p_values": p_values,
+        "p_value": float(min(p_values)),
+        "n_templates": len(keys),
+        "m": m,
+        "N": N,
+    }
 
 
 # --------------------------------------------------------------------------- #
 # 8. Overlapping Template Matching
 # --------------------------------------------------------------------------- #
-_OVL_PI_M9 = [0.364091, 0.185659, 0.139381, 0.100571, 0.210432]  # [verify]
+def _ovl_pr(u: int, eta: float) -> float:
+    """Probability Pr(u, eta) that the all-ones B-bit block occurs exactly u times.
+
+    Faithful transcription of NIST STS 2.1.2 ``overlappingTemplateMatchings.c``
+    ``Pr()``: p(0) = exp(-eta); otherwise Pr(u) = sum_{l=1..u} exp(
+    -eta - u*ln2 + l*ln(eta) - ln Gamma(l+1) + ln Gamma(u) - ln Gamma(l)
+    - ln Gamma(u-l+1) ), with eta = lambda / 2 and lambda = (M - m + 1) / 2^m.
+    """
+    if u == 0:
+        return math.exp(-eta)
+    total = 0.0
+    for l in range(1, u + 1):
+        term = (
+            -eta - u * math.log(2.0) + l * math.log(eta)
+            - math.lgamma(l + 1)
+            + math.lgamma(u)
+            - math.lgamma(l)
+            - math.lgamma(u - l + 1)
+        )
+        total += math.exp(term)
+    return total
 
 
-def overlapping_template(seq: Sequence[int], m: int = 9) -> Dict[str, float]:
+def overlapping_template(seq: Sequence[int], m: int = 9, M: int = 1032) -> Dict[str, float]:
+    """Overlapping template matching test (SP 800-22 Rev 1a §2.8).
+
+    Template B = 111...1 (m bits).  The sequence is split into N = n // M substrings
+    of length M = 1032.  For each substring W counts overlapping occurrences of B;
+    the substring is binned into one of 6 classes {0,1,2,3,4,>=5}.  The expected
+    proportions pi_i are computed from the exact distribution via ``_ovl_pr(i, eta)``
+    with eta = lambda/2, lambda = (M-m+1)/2^m (NIST Eq. for the all-ones template),
+    and pi_5 = 1 - sum_{i<5} pi_i.  chi^2 = sum_i (nu_i - N*pi_i)^2/(N*pi_i);
+    p = igamc(K/2, chi^2/2) with K = 5.
+    """
     s = _bits(seq)
     n = len(s)
-    tpl = [1] * m          # all-ones template (standard default B = 111...1)
-    W = 0
-    for i in range(n - m + 1):
-        if s[i:i + m] == tpl:
-            W += 1
-    lam = (n - m + 1) / (1 << m)
-    counts = [0] * 5
-    if W <= 0:
-        counts[0] += 1
-    elif W == 1:
-        counts[1] += 1
-    elif W == 2:
-        counts[2] += 1
-    elif W == 3:
-        counts[3] += 1
-    else:
-        counts[4] += 1
-    N = 1  # single template -> N = number of (template, blocks) = 1
-    pi = _OVL_PI_M9
-    chi2 = sum((counts[i] - N * pi[i]) ** 2 / (N * pi[i]) for i in range(5))
+    N = n // M
+    if N == 0:
+        return {"p_value": float("nan"), "chi2": float("nan"), "N": 0, "m": m}
+    lam = (M - m + 1) / (1 << m)
+    eta = lam / 2.0
+    pi = [_ovl_pr(i, eta) for i in range(5)]
+    pi.append(1.0 - sum(pi))  # pi[5] = P(W >= 5)
+    nu = [0] * 6
+    for i in range(N):
+        block = s[i * M:(i + 1) * M]
+        W = 0
+        for j in range(M - m + 1):
+            if all(block[j + k] == 1 for k in range(m)):
+                W += 1
+        if W <= 4:
+            nu[W] += 1
+        else:
+            nu[5] += 1
+    chi2 = sum((nu[i] - N * pi[i]) ** 2 / (N * pi[i]) for i in range(6))
     p = _igamc(5.0 / 2.0, chi2 / 2.0)
-    return {"p_value": float(p), "chi2": chi2, "W": W, "lam": lam}
+    return {"p_value": float(p), "chi2": chi2, "N": N, "M": M, "m": m, "lambda": lam}
 
 
 # --------------------------------------------------------------------------- #
