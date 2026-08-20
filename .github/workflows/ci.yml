@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install numpy scipy sympy matplotlib pycryptodome
+      - name: Run smoke suites
+        run: python tests/run_all.py
+      - name: Reference cipher sanity
+        run: python tests/test_ciphers.py
+      - name: NIST 15-test battery
+        run: python tests/test_nist15.py
