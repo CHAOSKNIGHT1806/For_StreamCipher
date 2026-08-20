@@ -204,13 +204,12 @@ python cli.py list
 
 **注册 skill（在新电脑）**：
 ```powershell
-# 把 skill 复制到用户技能根（目录名必须叫 stream-cipher-security）
+# 把仓库里现成的 skill/SKILL.md 复制到用户技能根（目录名必须叫 stream-cipher-security）
 New-Item -ItemType Directory -Force -Path "$HOME\.dsh\skills\stream-cipher-security" | Out-Null
-Copy-Item "D:\hardness\stream-cipher-analyzer\skill\stream-cipher-security.md" "$HOME\.dsh\skills\stream-cipher-security\SKILL.md"
+Copy-Item "D:\hardness\stream-cipher-analyzer\skill\SKILL.md" "$HOME\.dsh\skills\stream-cipher-security\SKILL.md"
 # ⚠️ 关键：打开 SKILL.md，把里面所有 "D:\hardness\stream-cipher-analyzer" 改成新电脑的实际工具路径！
 ```
-> skill 的前端 YAML 头（`name`/`description`）来自我另存的一份 SKILL.md；若你打包的是本仓库，
-> `skill/stream-cipher-security.md` 是方法论文本，需要补上前端 YAML（见 §4.3 的完整 SKILL.md 模板）。
+> 仓库里已含带 YAML 前端的 `skill/SKILL.md`（可直接注册），§4.3 也给了完整模板作对照。
 
 ### 4.2 在线安装（GitHub 拉取）
 
