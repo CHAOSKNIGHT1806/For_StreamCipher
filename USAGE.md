@@ -34,6 +34,22 @@ python cli.py ca-screen --rules 90 30 150 110
 python cli.py analyze chacha20 --nseq 10 --nbits 1000000
 ```
 
+## 随机性测试：TESTU01（金标准，需 WSL + 驱动）
+
+```bash
+# 从密码生成密钥流跑 SmallCrush（快速筛查，~320 Mbit）
+python cli.py testu01 chacha20 --battery smallcrush
+
+# 直接从密钥流文件跑（.bits/.hex/.bin）
+python cli.py testu01 --keystream-file keystream.bin --battery smallcrush
+
+# BigCrush（金标准，~274 Gbit，建议云端）
+python cli.py testu01 my_cipher.py:MyCipher --battery bigcrush
+```
+
+数据量要求（密钥流总比特）：SmallCrush ~320 Mbit、Crush ~34 Gbit、BigCrush ~274 Gbit。
+见 `docs/environment.md`。
+
 ## 实例：分析你自己的算法
 
 把你的密码实现成一个 `CipherAdapter`（模板见 `docs/example_cipher.py`），

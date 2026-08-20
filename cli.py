@@ -30,7 +30,7 @@ if os.path.isdir(_VENDOR) and _VENDOR not in sys.path:
 from analyzer.ca_model import screen_linear_degeneration  # noqa: E402
 from analyzer.comparison import ca_attack_surface_table, comparison_table  # noqa: E402
 from analyzer.empirical import empirical_comparison  # noqa: E402
-from analyzer.ingest import generate_samples  # noqa: E402
+from analyzer.ingest import generate_samples, read_bits_file  # noqa: E402
 from analyzer.linear import linear_complexity, linear_complexity_profile  # noqa: E402
 from analyzer.performance import ca_fpga_estimate  # noqa: E402
 from analyzer.report import (  # noqa: E402
@@ -41,6 +41,7 @@ from analyzer.report import (  # noqa: E402
 )
 from analyzer.report_builder import build_report  # noqa: E402
 from analyzer.rng_nist import run_battery  # noqa: E402
+from analyzer.rng_testu01 import DATA_BITS, run_testu01  # noqa: E402
 from analyzer.security import forward_backward_summary  # noqa: E402
 from analyzer.stats import summary_stats  # noqa: E402
 
@@ -147,6 +148,28 @@ def cmd_empirical(args) -> None:
     csv_table(headers, [[r[h] for h in headers] for r in rows], args.outdir, "empirical_comparison")
 
 
+def cmd_testu01(args) -> None:
+    """Run a TestU01 battery on a cipher's keystream or a keystream file."""
+    if args.keystream_file:
+        bits = read_bits_file(args.keystream_file)
+        source = args.keystream_file
+    else:
+        if not args.cipher:
+            print("error: provide a cipher spec or --keystream-file")
+            return
+        adapter = load_adapter(args.cipher)
+        nbits = args.nbits or DATA_BITS.get(args.battery, DATA_BITS["smallcrush"])
+        key = bytes.fromhex(args.key) if args.key else bytes([0xA5] * (adapter.key_size // 8 or 16))
+        iv = bytes(adapter.iv_size // 8 or 0)
+        bits = adapter.keystream(key, iv, nbits)
+        source = adapter.name
+    print(f"== TestU01 {args.battery} on {source} ({len(bits)} bits) ==")
+    res = run_testu01(bits, battery=args.battery, timeout=args.timeout)
+    print(res["stdout"])
+    if res["stderr"]:
+        print("[stderr]", res["stderr"])
+
+
 def _add_blackbox_args(p) -> None:
     p.add_argument("cipher")
     p.add_argument("--nseq", type=int, default=10)
@@ -188,6 +211,16 @@ def main() -> None:
     ep.add_argument("--nbits", type=int, default=20000)
     ep.add_argument("--outdir", default="results")
 
+    t = sub.add_parser("testu01", help="run a TestU01 battery (needs WSL + driver)")
+    t.add_argument("cipher", nargs="?", default=None, help="cipher spec (or use --keystream-file)")
+    t.add_argument("--keystream-file", default=None, help="keystream file (.bits/.hex/.bin) instead of a cipher")
+    t.add_argument("--battery", default="smallcrush",
+                   choices=["smallcrush", "crush", "bigcrush", "rabbit", "alphabit"])
+    t.add_argument("--nbits", type=int, default=None,
+                   help="keystream bits to generate (default: battery requirement)")
+    t.add_argument("--key", default=None, help="hex key")
+    t.add_argument("--timeout", type=int, default=None)
+
     args = p.parse_args()
     if args.cmd == "list":
         cmd_list(args)
@@ -201,6 +234,8 @@ def main() -> None:
         cmd_compare(args)
     elif args.cmd == "empirical":
         cmd_empirical(args)
+    elif args.cmd == "testu01":
+        cmd_testu01(args)
 
 
 if __name__ == "__main__":
