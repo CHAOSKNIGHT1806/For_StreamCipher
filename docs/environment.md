@@ -29,23 +29,39 @@ Verify:
 wsl gcc --version
 ```
 
-## 2. Build TESTU01 (one-time)
+## 2. Install TestU01 + battery driver (one-time)
 
-Inside WSL Ubuntu:
+TestU01 is in Ubuntu's `multiverse` repository — no source build needed:
 
 ```bash
-cd ~
-wget http://simul.iro.umontreal.ca/testu01/TestU01-1.2.3.tar.gz
-tar xzf TestU01-1.2.3.tar.gz
-cd TestU01-1.2.3
-./configure --prefix=$HOME/testu01
-make -j
-make install
+sudo apt update
+sudo apt install -y testu01-bin libtestu01-0-dev
 ```
 
-The Python wrapper (`analyzer/rng_testu01.py`) shells out to the compiled
-`birthday`, `smallcrush`, `crush`, `bigcrush` binaries under
-`$HOME/testu01/bin`.
+Then compile the battery driver (reads 32-bit decimal integers and runs the
+batteries). Adjust `/mnt/d/...` to your workspace path:
+
+```bash
+gcc -O2 -o /root/testu01_driver /mnt/d/hardness/stream-cipher-analyzer/analyzer/testu01_driver.c \
+    -ltestu01 -ltestu01mylib -ltestu01probdist -lm
+```
+
+The Python wrapper `analyzer/rng_testu01.py` invokes
+`wsl -u root -e /root/testu01_driver <battery> <textfile>`.
+
+### Keystream data requirements (prepare the input)
+
+Pack keystream bits into 32-bit words (LSB-first), then write each word as a
+decimal integer, one per line. Approximate total keystream bits per battery:
+
+| Battery    | bits            | ~words (32-bit) |
+|------------|-----------------|-----------------|
+| SmallCrush | 2^28 (~320 Mbit)| ~10 M           |
+| Crush      | 2^35 (~34 Gbit) | ~1 G            |
+| BigCrush   | 2^38 (~274 Gbit)| ~8 G            |
+
+SmallCrush is the quick local check; BigCrush needs tens of GB (use the cloud
+or stream it).
 
 ## 3. Python packages
 
